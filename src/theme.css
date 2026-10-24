@@ -1,0 +1,26 @@
+:root{
+  --brand:#5b5ddd;
+  --brand-hover:#484bc7;
+  --brand-ink:#5054c7;
+  --brand-on:#ffffff;
+  --brand-focus:#7779e8;
+  --brand-soft:#efefff;
+  --brand-softest:#f7f7ff;
+  --brand-border:#dedff1;
+  --brand-shadow:#5b5ddd24;
+  --brand-shadow-soft:#5558d90d;
+  --app-background:#f7f8fc;
+  --preview-background:#eaeef5;
+}
+input,select,textarea{accent-color:var(--brand)}
+.primary{color:var(--brand-on)}
+.nav-item.active,.nav-item:hover,.text-btn,.avatar,.brand-mark,
+.quick-icon.brand-accent,.inventory-card-icon,.inventory-card-arrow,
+.matrix-total b,.status.new,.incentive-summary strong,.invoice-number-link,
+.stage-order-head strong,.exam-eye-fields legend,.invoice-summary-balance strong,
+.invoice-customer-initials{color:var(--brand-ink)}
+.matrix-table thead th{color:var(--brand-on)}
+.invoice-action-menu button:hover,.invoice-action-menu button:focus-visible,
+.invoice-action-menu button:hover svg,.invoice-action-menu button:focus-visible svg{color:var(--brand-on)}
+.invoice-detail-view .invoice-action-toolbar>button:nth-child(6){color:var(--brand-on)}
+.invoice-action-menu button:disabled{color:#777;background:white}

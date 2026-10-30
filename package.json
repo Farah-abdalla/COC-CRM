@@ -7,14 +7,15 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test src/transferData.test.js"
+    "test": "node --test --test-concurrency=1 src/*.test.js server/*.test.mjs",
+    "seed:examples": "node server/seed-examples.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^0.468.0",
     "react": "latest",
     "react-dom": "latest",
-    "lucide-react": "^0.468.0"
-  },
-  "devDependencies": {}
+    "vite": "latest"
+  }
 }

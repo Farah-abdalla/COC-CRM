@@ -1,0 +1,42 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createAccountService} from './accounts.mjs';
+const origin='http://localhost:5173';
+function client(service){let cookie='';return async(path,method='GET',body)=>{const response=await service.handle(new Request(origin+path,{method,headers:{Cookie:cookie,...(method==='GET'?{}:{Origin:origin,'Content-Type':'application/json'})},...(method==='GET'?{}:{body:JSON.stringify(body)})}),{local:true});if(response.headers.get('set-cookie'))cookie=response.headers.get('set-cookie').split(';')[0];return {status:response.status,body:await response.json()};};}
+const ok=result=>{assert.equal(result.status,200,JSON.stringify(result.body));return result.body;};
+test('account attendance branch creates one linked HR profile and keeps clocking scoped to its owner',async t=>{
+ const service=createAccountService(':memory:');t.after(()=>service.close());const owner=client(service),staff=client(service);
+ ok(await owner('/api/auth/setup','POST',{name:'Owner',email:'owner@branch.test',password:'owner-password-123'}));
+ const draft={name:'Branch Staff',email:'staff@branch.test',password:'staff-password-123',active:true,branches:['Nasr City'],attendanceBranch:'Nasr City',permissions:{}};
+ let account=ok(await owner('/api/users','POST',draft)).users.find(u=>u.email===draft.email);
+ assert.equal(account.hrRole,'employee');assert.equal(account.attendanceBranch,'Nasr City');
+ let state=ok(await owner('/api/hr')),employee=state.data.employees.find(e=>e.userId===account.id);
+ assert.equal(employee.branch,'Nasr City');assert.equal(employee.name,draft.name);assert.ok(employee.employeeCode);
+ const id=employee.id;
+ ok(await owner('/api/users','PATCH',{...account,password:'',name:'Renamed Staff'}));
+ state=ok(await owner('/api/hr'));assert.equal(state.data.employees.filter(e=>e.userId===account.id).length,1);assert.equal(state.data.employees.find(e=>e.id===id).name,'Renamed Staff');
+ ok(await staff('/api/auth/login','POST',{email:draft.email,password:draft.password}));
+ let own=ok(await staff('/api/hr'));assert.deepEqual(own.data.employees.map(e=>e.id),[id]);
+ const point=()=>({latitude:30.04,longitude:31.23,accuracy:8,capturedAt:new Date().toISOString()});
+ own=ok(await staff('/api/hr','POST',{revision:own.revision,action:'attendance.checkin',record:{location:point()}}));
+ assert.equal(own.data.attendance[0].userId,account.id);
+ const move={...account,password:'',branches:['New Cairo'],attendanceBranch:'New Cairo'};
+ assert.equal((await owner('/api/users','PATCH',move)).status,400,'Open shift must prevent branch changes');
+ assert.equal(ok(await owner('/api/users')).users.find(u=>u.id===account.id).attendanceBranch,'Nasr City','Account mutation must roll back with HR');
+ own=ok(await staff('/api/hr','POST',{revision:own.revision,action:'attendance.checkout',record:{location:point()}}));
+ const row=own.data.attendance[0];assert.equal(row.totalWorkingMinutes,(Date.parse(row.checkOut)-Date.parse(row.checkIn))/60000);
+ ok(await owner('/api/users','PATCH',move));
+ state=ok(await owner('/api/hr'));employee=state.data.employees.find(e=>e.id===id);assert.equal(employee.branch,'New Cairo');assert.equal(state.data.attendance[0].id,row.id);
+ assert.equal((await owner('/api/users','POST',{dataScope:'branch',...draft,email:'wrong@branch.test',attendanceBranch:'New Cairo'})).status,400);
+ assert.ok(!ok(await owner('/api/users')).users.some(u=>u.email==='wrong@branch.test'));
+ ok(await owner('/api/users','PATCH',{...move,active:false}));assert.equal(ok(await owner('/api/hr')).data.employees.find(e=>e.id===id).status,'Inactive');
+});
+test('saving an account links an existing matching HR email without duplicating its profile',async t=>{
+ const service=createAccountService(':memory:');t.after(()=>service.close());const owner=client(service);
+ ok(await owner('/api/auth/setup','POST',{name:'Owner',email:'owner@existing.test',password:'owner-password-123'}));
+ let state=ok(await owner('/api/hr'));
+ state=ok(await owner('/api/hr','POST',{revision:state.revision,action:'employee.save',record:{employeeCode:'EXISTING',name:'Existing Staff',email:'existing@branch.test',branch:'Nasr City',hireDate:'2026-01-01',status:'Active',shiftStart:'09:00',workDays:[0,1,2,3,4]}}));
+ const id=state.data.employees[0].id;
+ const account=ok(await owner('/api/users','POST',{dataScope:'branch',name:'Existing Staff',email:'existing@branch.test',password:'staff-password-123',branches:['Nasr City'],attendanceBranch:'Nasr City'})).users.find(u=>u.email==='existing@branch.test');
+ state=ok(await owner('/api/hr'));assert.equal(state.data.employees.length,1);assert.equal(state.data.employees[0].id,id);assert.equal(state.data.employees[0].userId,account.id);
+});

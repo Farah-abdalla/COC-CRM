@@ -1,34 +1,22 @@
-import React, { useState } from 'react';
-import { X } from 'lucide-react';
-import { invoiceAmounts } from './invoiceAmounts';
-import { refundableAmount, invoiceRefundItem, itemRefundPlan } from './creditNotes';
-
-const money=value=>new Intl.NumberFormat('en-EG',{style:'currency',currency:'EGP',minimumFractionDigits:2}).format(value);
+import {t as uiT,useLanguage as useUiLanguage,getLocale as uiLocale} from './i18n';
+import PaymentRoutingFields from './PaymentRoutingFields';
+import {treasuryAccountFor} from './paymentMethods';
+import React,{useState} from 'react';
+import {X} from 'lucide-react';
+import {invoiceAmounts} from './invoiceAmounts';
+import {refundableAmount,invoiceRefundItems,invoiceRefundItem,itemRefundPlan} from './creditNotes';
+const money=value=>new Intl.NumberFormat(uiLocale(),{style:'currency',currency:'EGP',minimumFractionDigits:2}).format(value);
 export default function RefundInvoice({invoice,creditNotes=[],customerName,onRefund,onClose}){
-  const maximum=refundableAmount(invoice),amounts=invoiceAmounts(invoice),item=invoiceRefundItem(invoice,creditNotes);
-  const [selected,setSelected]=useState(true);
-  const [quantity,setQuantity]=useState(item.remainingQuantity>0?1:0);
-  const [reason,setReason]=useState('');
-  const [error,setError]=useState('');
-  const plan=selected?itemRefundPlan(invoice,creditNotes,quantity):{error:'Select the item to refund.'};
-  const submit=event=>{
-    event.preventDefault();
-    if(plan.error){setError(plan.error);return;}
-    if(!reason.trim()){setError('Enter a reason for the return.');return;}
-    const result=onRefund(invoice.id,{quantity:Number(quantity)},reason.trim());
-    if(result===true)onClose();else setError(typeof result==='string'?result:'The item refund could not be saved. Please try again.');
-  };
-  return <div className="modal-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget)onClose();}} onKeyDown={event=>{if(event.key==='Escape')onClose();}}>
-    <form className="modal refund-modal item-refund-modal" role="dialog" aria-modal="true" aria-labelledby="refund-title" onSubmit={submit}>
-      <div className="modal-head"><h2 id="refund-title">Refund invoice items</h2><button type="button" className="icon-btn" aria-label="Close refund" onClick={onClose}><X/></button></div>
-      <p className="refund-reference"><strong>{invoice.number||'INV-'+invoice.id}</strong><span>{customerName}</span></p>
-      <dl className="refund-summary"><div><dt>Already refunded</dt><dd>{money(amounts.refunded)}</dd></div><div><dt>Remaining amount paid</dt><dd>{money(maximum)}</dd></div></dl>
-      <div className="table-wrap refund-items-table" tabIndex={0} aria-label="Invoice items available for refund"><table><thead><tr><th>Item / SKU</th><th>Sold</th><th>Returned</th><th>Remaining</th><th>Price after discount</th><th>Return quantity</th></tr></thead><tbody><tr><td><label className="refund-item-selection"><input type="checkbox" checked={selected} disabled={item.remainingQuantity<=0} onChange={event=>setSelected(event.target.checked)} aria-label={'Select '+item.sku}/><strong>{item.sku||'No SKU'}</strong></label></td><td>{item.quantity}</td><td>{item.returnedQuantity}</td><td>{item.remainingQuantity}</td><td>{money(item.netUnitPrice)}</td><td><input aria-label="Return quantity" required type="number" min="1" max={item.remainingQuantity} step="1" value={quantity} disabled={!selected||item.remainingQuantity<=0} onChange={event=>setQuantity(event.target.value)}/></td></tr></tbody></table></div>
-      <div className="form-grid"><label>Refund amount (EGP)<input readOnly value={(plan.amount||0).toFixed(2)}/></label><label className="span-2">Reason *<textarea required rows={3} value={reason} onChange={event=>setReason(event.target.value)} placeholder="Reason for returning these items"/></label></div>
-      <p className="sales-match-hint">The refund is calculated from the selected quantity after the invoice discount. Shipping and adjustments are not refunded with items. A linked credit note records the item, quantity, and amount.</p>
-      {item.legacyAmount>0&&<p className="sales-match-hint">Earlier refunds of {money(item.legacyAmount)} did not record item quantities. They are included in the payment limit.</p>}
-      {(error||plan.error)&&<p className="sales-date-error" role="alert">{error||plan.error}</p>}
-      <div className="modal-actions"><button type="button" className="secondary" onClick={onClose}>Cancel</button><button type="submit" className="primary" disabled={maximum<=0||item.remainingQuantity<=0||!selected||Boolean(plan.error)}>Refund selected items</button></div>
-    </form>
-  </div>;
+  useUiLanguage();
+
+ const maximum=refundableAmount(invoice),amounts=invoiceAmounts(invoice),items=invoiceRefundItems(invoice,creditNotes),summary=invoiceRefundItem(invoice,creditNotes);
+ const [method,setMethod]=useState(invoice.paymentMethod||'Cash'),[treasuryCategory,setTreasuryCategory]=useState(treasuryAccountFor(invoice.paymentMethod||'Cash',invoice.paymentTreasuryCategory||'')||'');
+ const [quantities,setQuantities]=useState(()=>{const first=items.find(item=>item.remainingQuantity>0);return first?{[first.itemId]:1}:{};}),[reason,setReason]=useState(''),[error,setError]=useState('');
+ const selection=items.filter(item=>Number(quantities[item.itemId])>0).map(item=>({itemId:item.itemId,quantity:Number(quantities[item.itemId])})),plan=itemRefundPlan(invoice,creditNotes,selection);
+ function submit(event){event.preventDefault();if(plan.error){setError(plan.error);return;}if(!reason.trim()){setError('Enter a reason for the return.');return;}const result=onRefund(invoice.id,{items:selection,method,treasuryCategory},reason.trim());if(result===true)onClose();else setError(typeof result==='string'?result:'The item refund could not be saved.');}
+ return <div className="modal-backdrop" onKeyDown={e=>{if(e.key==='Escape')onClose();}}><form className="modal refund-modal item-refund-modal" role="dialog" aria-modal="true" aria-labelledby="refund-title" onSubmit={submit}><div className="modal-head"><h2 id="refund-title">{uiT("Refund invoice items")}</h2><button type="button" className="icon-btn" aria-label={uiT("Close refund")} onClick={onClose}><X/></button></div>
+ <p className="refund-reference"><strong>{invoice.number || uiT('INV-') + invoice.id}</strong><span>{customerName}</span></p><dl className="refund-summary"><div><dt>{uiT("Already refunded")}</dt><dd>{money(amounts.refunded)}</dd></div><div><dt>{uiT("Remaining amount paid")}</dt><dd>{money(maximum)}</dd></div></dl>
+ <div className="table-wrap refund-items-table" tabIndex={0} aria-label={uiT("Invoice items available for refund")}><table><thead><tr><th>{uiT("Item / SKU")}</th><th>{uiT("Sold")}</th><th>{uiT("Returned")}</th><th>{uiT("Remaining")}</th><th>{uiT("Price after discount")}</th><th>{uiT("Return quantity")}</th></tr></thead><tbody>{items.map(item=><tr key={item.itemId}><td><label className="refund-item-selection"><input type="checkbox" checked={Number(quantities[item.itemId])>0} disabled={item.remainingQuantity<=0} onChange={e=>setQuantities({...quantities,[item.itemId]:e.target.checked?1:0})} aria-label={uiT('Select '+item.sku)}/><strong>{item.sku}</strong></label></td><td>{item.quantity}</td><td>{item.returnedQuantity}</td><td>{item.remainingQuantity}</td><td>{money(item.netUnitPrice)}</td><td><input aria-label={uiT('Return quantity for '+item.sku)} type="number" min="0" max={item.remainingQuantity} step="1" value={quantities[item.itemId]||0} disabled={item.remainingQuantity<=0} onChange={e=>setQuantities({...quantities,[item.itemId]:e.target.value})}/></td></tr>)}</tbody></table></div>
+ <div className="form-grid"><PaymentRoutingFields title={uiT("Refund method")} method={method} treasuryCategory={treasuryCategory} branch={invoice.branch} onChange={routing=>{setMethod(routing.method);setTreasuryCategory(routing.treasuryCategory);}}/><label>{uiT("Refund amount (EGP)")}<input readOnly value={(plan.amount||0).toFixed(2)}/></label><label className="span-2">{uiT("Reason *")}<textarea required rows={3} value={reason} onChange={e=>setReason(e.target.value)} placeholder={uiT("Reason for returning these items")}/></label></div><p className="sales-match-hint">{uiT("Discount is allocated across items. Shipping and adjustments are not refunded with items.")}</p>{summary.legacyAmount>0&&<p className="sales-match-hint">{uiT("Earlier refunds of ")}{money(summary.legacyAmount)} {uiT("did not record item quantities and are included in the payment limit.")}</p>}{(error||plan.error)&&<p className="sales-date-error" role="alert">{uiT(error) || uiT(plan.error)}</p>}<div className="modal-actions"><button className="secondary" type="button" onClick={onClose}>{uiT("Cancel")}</button><button className="primary" type="submit" disabled={maximum<=0||Boolean(plan.error)}>{uiT("Refund selected items")}</button></div>
+ </form></div>;
 }

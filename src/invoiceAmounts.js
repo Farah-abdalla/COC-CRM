@@ -1,6 +1,7 @@
+import {invoiceSubtotalCents} from './invoiceItems.js';
 const cents=value=>Math.round((Number(value)||0)*100);
 export function invoiceAmounts(invoice){
-  const subtotalCents=cents(invoice.total),discountCents=cents(invoice.discount);
+  const subtotalCents=invoiceSubtotalCents(invoice),discountCents=cents(invoice.discount);
   const shippingCents=cents(invoice.shippingCharge),adjustmentCents=cents(invoice.adjustment);
   const itemTotalCents=subtotalCents-discountCents;
   const originalTotalCents=Math.max(0,itemTotalCents+shippingCents+adjustmentCents),originalPaidCents=cents(invoice.paid);

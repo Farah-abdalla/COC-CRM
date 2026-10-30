@@ -1,0 +1,25 @@
+.language-switch{display:inline-flex;align-items:center;justify-content:center;gap:7px;flex-shrink:0;padding:8px 12px;border:1px solid var(--brand-border,#dce5df);border-radius:9px;background:#fff;color:var(--brand-ink,var(--brand));font-size:12px;font-weight:700;min-height:36px;white-space:nowrap}.language-switch:hover{background:var(--brand-softest)}.login-language{position:fixed;top:22px;inset-inline-end:24px;z-index:10}.login-language .language-switch{font-size:14px;min-height:40px}
+html[lang="ar"] body,html[lang="ar"] input,html[lang="ar"] select,html[lang="ar"] textarea,html[lang="ar"] button,html[lang="ar"] h1,html[lang="ar"] h2,html[lang="ar"] h3,html[lang="ar"] .brand strong{font-family:Tahoma,"Segoe UI",Arial,sans-serif}
+html[dir="rtl"] .sidebar{left:auto;right:0;border-right:0;border-left:1px solid #eaecf3}
+html[dir="rtl"] .main-area{margin-left:0;margin-right:254px}
+html[dir="rtl"] .nav-count,html[dir="rtl"] .chevron,html[dir="rtl"] .arrow,html[dir="rtl"] .treasury-chevron{margin-left:0;margin-right:auto}
+html[dir="rtl"] .nav-item,html[dir="rtl"] th,html[dir="rtl"] td,html[dir="rtl"] .invoice-number-link,html[dir="rtl"] .invoice-action-menu button,html[dir="rtl"] .treasury-section,html[dir="rtl"] .treasury-amount-editor form,html[dir="rtl"] .treasury-balance-breakdown dt,html[dir="rtl"] .permissions-table th:first-child,html[dir="rtl"] .receipt-items{text-align:right}
+html[dir="rtl"] .permissions-table td,html[dir="rtl"] .permissions-table thead th:not(:first-child){text-align:center}
+html[dir="rtl"] .payments-total{text-align:left}
+html[dir="rtl"] .payments-filters>span{margin-left:0;margin-right:auto}
+html[dir="rtl"] .eyebrow,html[dir="rtl"] .nav-label,html[dir="rtl"] .receipt-document-title{letter-spacing:0}
+html[dir="rtl"] input[type="email"],html[dir="rtl"] input[type="tel"],html[dir="rtl"] input[type="number"]{direction:ltr;text-align:right}
+html[dir="rtl"] .invoice-items-editor .invoice-item-grid>label:first-child input{direction:ltr;text-align:right}
+html[dir="rtl"] .lucide-arrow-left,html[dir="rtl"] .lucide-arrow-right,html[dir="rtl"] .lucide-chevron-right,html[dir="rtl"] .quick-actions .arrow{transform:scaleX(-1)}
+html[dir="rtl"] .invoice-journal article{border-left:0;border-right:2px solid var(--brand-border);margin-left:0;margin-right:7px}
+html[dir="rtl"] .invoice-action-toolbar>button{border-right:0;border-left:1px solid #e5e7f0}
+html[dir="rtl"] .invoice-action-toolbar>.invoice-menu-trigger{margin-left:0;margin-right:8px}
+html[dir="rtl"] .invoice-detail-view .invoice-action-toolbar>button:nth-child(6){margin-left:0;margin-right:auto}
+html[dir="rtl"] .invoice-detail-view .invoice-action-toolbar>.invoice-menu-trigger{margin-right:0}
+html[dir="rtl"] .invoice-receipt dd{text-align:left}
+html[dir="rtl"] .receipt-ribbon{left:auto;right:0}
+html[dir="rtl"] .receipt-ribbon span{left:auto;right:-35px;transform:rotate(45deg)}
+html[dir="rtl"] .receipt-items th:nth-child(n+3),html[dir="rtl"] .receipt-items td:nth-child(n+3){text-align:left}
+@media(max-width:1024px){html[dir="rtl"] .sidebar{transform:translateX(100%)}html[dir="rtl"] .sidebar.show{transform:translateX(0)}html[dir="rtl"] .main-area{margin-right:0}html[dir="rtl"] .close-nav{margin-left:0;margin-right:auto}html[dir="rtl"] .breadcrumb{margin-right:0;margin-left:auto}}
+@media(max-width:720px){.language-switch{padding:8px;min-height:40px}.login-language{top:12px;inset-inline-end:12px}html[dir="rtl"] .payments-total{text-align:right}html[dir="rtl"] .payments-filters>span{margin-right:0}html[dir="rtl"] .invoice-detail-view .invoice-action-toolbar>button:nth-child(6){margin-right:0}}
+@media print{.language-switch,.login-language{display:none!important}html[dir="rtl"] .invoice-paper{direction:rtl;font-family:Tahoma,Arial,sans-serif}}

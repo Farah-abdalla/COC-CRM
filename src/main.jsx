@@ -1,7 +1,11 @@
+import {LanguageProvider} from './i18n.jsx';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.jsx';
+import AuthProvider from './Auth.jsx';
 import './style.css';
 import './responsive.css';
 import './theme.css';
-createRoot(document.getElementById('root')).render(<React.StrictMode><App /></React.StrictMode>);
+import './i18n.css';
+import './redesign.css';
+createRoot(document.getElementById('root')).render(<React.StrictMode><LanguageProvider><AuthProvider><App /></AuthProvider></LanguageProvider></React.StrictMode>);

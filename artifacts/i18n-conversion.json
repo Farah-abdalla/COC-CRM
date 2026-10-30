@@ -1,0 +1,142 @@
+[
+  {
+    "file": "AccountManagement.jsx",
+    "texts": 45,
+    "options": 0,
+    "hooks": 2,
+    "formatters": 0
+  },
+  {
+    "file": "App.jsx",
+    "texts": 367,
+    "options": 7,
+    "hooks": 11,
+    "formatters": 4
+  },
+  {
+    "file": "Auth.jsx",
+    "texts": 11,
+    "options": 0,
+    "hooks": 1,
+    "formatters": 0
+  },
+  {
+    "file": "CommissionSettings.jsx",
+    "texts": 29,
+    "options": 0,
+    "hooks": 1,
+    "formatters": 0
+  },
+  {
+    "file": "CreditNotePage.jsx",
+    "texts": 19,
+    "options": 0,
+    "hooks": 1,
+    "formatters": 1
+  },
+  {
+    "file": "DataStorage.jsx",
+    "texts": 13,
+    "options": 0,
+    "hooks": 1,
+    "formatters": 0
+  },
+  {
+    "file": "ExpensesPage.jsx",
+    "texts": 50,
+    "options": 3,
+    "hooks": 1,
+    "formatters": 0
+  },
+  {
+    "file": "IncentivePage.jsx",
+    "texts": 32,
+    "options": 0,
+    "hooks": 1,
+    "formatters": 0
+  },
+  {
+    "file": "InvoiceActionDialog.jsx",
+    "texts": 22,
+    "options": 0,
+    "hooks": 1,
+    "formatters": 2
+  },
+  {
+    "file": "InvoiceActions.jsx",
+    "texts": 5,
+    "options": 0,
+    "hooks": 2,
+    "formatters": 0
+  },
+  {
+    "file": "InvoiceItemsEditor.jsx",
+    "texts": 14,
+    "options": 0,
+    "hooks": 1,
+    "formatters": 0
+  },
+  {
+    "file": "InvoicePrint.jsx",
+    "texts": 57,
+    "options": 0,
+    "hooks": 1,
+    "formatters": 3
+  },
+  {
+    "file": "ItemBarcode.jsx",
+    "texts": 4,
+    "options": 0,
+    "hooks": 1,
+    "formatters": 0
+  },
+  {
+    "file": "PaymentRoutingFields.jsx",
+    "texts": 7,
+    "options": 2,
+    "hooks": 1,
+    "formatters": 0
+  },
+  {
+    "file": "PaymentsPage.jsx",
+    "texts": 25,
+    "options": 1,
+    "hooks": 1,
+    "formatters": 0
+  },
+  {
+    "file": "RecordPages.jsx",
+    "texts": 115,
+    "options": 5,
+    "hooks": 1,
+    "formatters": 1
+  },
+  {
+    "file": "RefundInvoice.jsx",
+    "texts": 24,
+    "options": 0,
+    "hooks": 1,
+    "formatters": 1
+  },
+  {
+    "file": "treasuryAmounts.js",
+    "texts": 0,
+    "options": 0,
+    "hooks": 0,
+    "formatters": 1
+  },
+  {
+    "file": "TreasuryPage.jsx",
+    "texts": 39,
+    "options": 0,
+    "hooks": 2,
+    "formatters": 0
+  },
+  {
+    "file": "WorkOrderBoard.jsx",
+    "texts": 19,
+    "options": 1,
+    "hooks": 1,
+    "formatters": 1
+  }
+]

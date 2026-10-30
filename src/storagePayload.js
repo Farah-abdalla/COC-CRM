@@ -1,4 +1,4 @@
-export const recordKeys = ['customers','orders','exams','branches','invoices','creditNotes','invoiceEvents','salesRecords','inventoryItems','vendorTransactions','transfers'];
+export const recordKeys = ['odooReportProducts','customReports','customers','orders','exams','branches','branchLocations','invoices','creditNotes','invoiceEvents','salesRecords','inventoryItems','vendorTransactions','transfers','treasuryTransfers','treasuryBalances','expenses','commissionRules'];
 export const MAX_SNAPSHOT_BYTES = 1800000;
 export function validSnapshot(value) {
   return Boolean(value && typeof value === 'object' && value.data && recordKeys.every(key =>

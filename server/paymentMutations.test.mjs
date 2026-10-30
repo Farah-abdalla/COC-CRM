@@ -1,0 +1,35 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createAccountService} from './accounts.mjs';
+import {normalizePermissions} from '../src/accessControl.js';
+const origin='http://localhost:5173';
+function client(service){let cookie='';return async(path,method='GET',body)=>{const response=await service.handle(new Request(origin+path,{method,headers:{Cookie:cookie,...(method==='GET'?{}:{Origin:origin,'Content-Type':'application/json'})},...(method==='GET'?{}:{body:JSON.stringify(body)})}),{local:true});if(response.headers.get('set-cookie'))cookie=response.headers.get('set-cookie').split(';')[0];return {status:response.status,body:await response.json()};};}
+test('payment API enforces action rights, branches, actors and revisions without general invoice access',async t=>{
+ const service=createAccountService(':memory:');t.after(()=>service.close());const admin=client(service),staff=client(service);
+ await admin('/api/auth/setup','POST',{name:'Owner',email:'owner@pay.test',password:'owner-password-123'});
+ const create=await admin('/api/users','POST',{dataScope:'branch',name:'Staff',email:'staff@pay.test',password:'staff-password-123',branches:['Nasr City'],permissions:normalizePermissions({Payments:{view:true,edit:true},Treasury:{view:true,delete:true}})});
+ const user=create.body.users.find(row=>row.email==='staff@pay.test');
+ const seed=(await admin('/api/crm-data')).body;
+ seed.snapshot.data.invoices=[{id:'one',branch:'Nasr City',total:100,paid:80},{id:'two',branch:'New Cairo',total:100,paid:50}];
+ seed.snapshot.data.invoiceEvents=[{id:'a',invoiceId:'one',branch:'Nasr City',action:'Payment recorded',amount:80,method:'Cash'},{id:'b',invoiceId:'two',branch:'New Cairo',action:'Payment recorded',amount:50,method:'Cash'}];
+ seed.snapshot.data.treasuryBalances=[{id:'opening-a',branch:'Nasr City',category:'Cash',amountCents:5000},{id:'opening-b',branch:'New Cairo',category:'Cash',amountCents:6000}];
+ assert.equal((await admin('/api/crm-data','PUT',{revision:seed.revision,snapshot:seed.snapshot})).status,200);
+ await staff('/api/auth/login','POST',{email:'staff@pay.test',password:'staff-password-123'});
+ const state=(await staff('/api/crm-data')).body,body={actorId:user.id,revision:state.revision,rowId:'payment-a',source:'Payments',changes:{amountCents:6000,method:'Wallet',treasuryCategory:'Wallet',reference:'REF',timestamp:'2026-10-26T12:00:00Z'}};
+ assert.equal((await staff('/api/payment-entry','PATCH',{...body,actorId:'wrong'})).status,403);
+ assert.equal((await staff('/api/payment-entry','PATCH',{...body,source:'Treasury'})).status,403);
+ assert.equal((await staff('/api/payment-entry','PATCH',{...body,changes:null})).status,403);
+ assert.equal((await staff('/api/payment-entry','PATCH',{...body,rowId:'payment-b'})).status,400);
+ const edited=await staff('/api/payment-entry','PATCH',body);assert.equal(edited.status,200);
+ assert.equal(edited.body.snapshot.data.invoices[0].paid,60);
+ assert.equal((await staff('/api/payment-entry','PATCH',body)).status,409);
+ const forged=structuredClone(edited.body.snapshot);forged.data.invoices[0].total=999;
+ assert.equal((await staff('/api/crm-data','PUT',{revision:edited.body.revision,snapshot:forged})).status,400);
+ const removed=await staff('/api/payment-entry','PATCH',{...body,source:'Treasury',revision:edited.body.revision,changes:null});
+ assert.equal(removed.status,200);assert.equal(removed.body.snapshot.data.invoices[0].paid,0);assert.equal(removed.body.snapshot.data.invoiceEvents.length,0);
+ const balances=structuredClone(removed.body.snapshot);balances.data.treasuryBalances=[];
+ assert.equal((await staff('/api/crm-data','PUT',{revision:removed.body.revision,snapshot:balances})).status,200);
+ const all=(await admin('/api/crm-data')).body;
+ assert.equal(all.snapshot.data.invoices.find(row=>row.id==='two').paid,50);
+ assert.deepEqual(all.snapshot.data.treasuryBalances.map(row=>row.id),['opening-b']);
+});

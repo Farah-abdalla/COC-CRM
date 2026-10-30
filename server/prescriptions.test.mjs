@@ -1,0 +1,44 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createAccountService} from './accounts.mjs';
+import {normalizePermissions} from '../src/accessControl.js';
+import {prescriptionExam,prescriptionAlerts} from '../src/prescriptions.js';
+const origin='http://localhost:5173';
+function client(service){let cookie='';return async(path,method='GET',body)=>{const response=await service.handle(new Request(origin+path,{method,headers:{Cookie:cookie,...(method==='GET'?{}:{Origin:origin,'Content-Type':'application/json'})},...(method==='GET'?{}:{body:JSON.stringify(body)})}),{local:true});if(response.headers.get('set-cookie'))cookie=response.headers.get('set-cookie').split(';')[0];return {status:response.status,body:await response.json()};};}
+test('staff work-order uploads persist in Eye Exams and enforce branch and customer links',async t=>{
+ const service=createAccountService(':memory:');t.after(()=>service.close());
+ const admin=client(service),staff=client(service),other=client(service);
+ await admin('/api/auth/setup','POST',{name:'Owner',email:'owner@rx.test',password:'owner-password-123'});
+ const permissions=normalizePermissions({'Work Orders':{view:true,add:true,edit:true},Customers:{view:true}});
+ let result=await admin('/api/users','POST',{dataScope:'branch',name:'Staff',email:'staff@rx.test',password:'staff-password-123',branches:['Nasr City'],permissions});
+ assert.equal(result.status,200);
+ const worker=result.body.users.find(user=>user.email==='staff@rx.test');
+ await admin('/api/users','POST',{dataScope:'branch',name:'Other',email:'other@rx.test',password:'other-password-123',branches:['New Cairo'],permissions});
+ const initial=(await admin('/api/crm-data')).body;
+ initial.snapshot.data.customers=[{id:1,name:'Customer A',branch:'Nasr City'},{id:2,name:'Customer B',branch:'New Cairo'}];
+ initial.snapshot.data.exams=[{id:'private',customerId:2,branch:'New Cairo',date:'2025-01-01'}];
+ assert.equal((await admin('/api/crm-data','PUT',{revision:initial.revision,snapshot:initial.snapshot})).status,200);
+ await staff('/api/auth/login','POST',{email:'staff@rx.test',password:'staff-password-123'});
+ await other('/api/auth/login','POST',{email:'other@rx.test',password:'other-password-123'});
+ const order={id:'order-rx',customerId:1,branch:'Nasr City',number:'WO-001',status:'New',examId:'rx-1'};
+ const image={name:'prescription.jpg',dataUrl:'data:image/jpeg;base64,YQ=='};
+ const exam=prescriptionExam(order,image,'2025-01-01',worker.id,'rx-1');
+ async function change(actor,mutate){const state=(await actor('/api/crm-data')).body;mutate(state.snapshot);return actor('/api/crm-data','PUT',{revision:state.revision,snapshot:state.snapshot});}
+ assert.equal((await change(staff,s=>{s.data.orders.push(order);s.data.exams.push(exam);})).status,200);
+ let saved=(await staff('/api/crm-data')).body.snapshot;
+ assert.equal(saved.data.exams.length,1);assert.equal(saved.data.exams[0].examImage.dataUrl,image.dataUrl);
+ assert.equal(saved.data.orders[0].examId,'rx-1');
+ assert.equal(prescriptionAlerts(saved.data,worker,new Date('2026-03-01')).length,1);
+ assert.deepEqual((await other('/api/crm-data')).body.snapshot.data.exams.map(exam=>exam.id),['private']);
+ assert.equal((await change(staff,s=>s.data.exams.push({...exam,id:'orphan'}))).status,400);
+ assert.equal((await change(staff,s=>{s.data.orders[0].examId='forged';s.data.exams.push({...exam,id:'forged',uploadedBy:'someone-else'});})).status,400);
+ assert.equal((await change(staff,s=>s.data.exams[0].date='2025-02-01')).status,400);
+ assert.equal((await change(staff,s=>s.data.orders[0].examId='private')).status,400);
+ assert.equal((await change(staff,s=>{s.data.orders.push({...order,id:'wrong-customer',customerId:2,examId:'wrong-rx'});s.data.exams.push({...exam,id:'wrong-rx',workOrderId:'wrong-customer'});})).status,400);
+ assert.equal((await change(staff,s=>s.data.orders[0].status='Lab')).status,200);
+ assert.equal((await staff('/api/crm-data')).body.snapshot.data.exams.length,1);
+ assert.equal((await change(staff,s=>{s.data.orders[0].examId='rx-2';s.data.exams.push({...exam,id:'rx-2',date:'2026-02-01'});})).status,200);
+ saved=(await staff('/api/crm-data')).body.snapshot;
+ assert.equal(saved.data.exams.length,2);
+ assert.equal(prescriptionAlerts(saved.data,worker,new Date('2026-03-01')).length,0);
+});

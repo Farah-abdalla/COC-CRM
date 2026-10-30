@@ -1,3 +1,15 @@
+# HR System
+
+The existing HR page now supports employee profiles, attendance, leave approvals, private documents, company assets, and HR roles using the existing local account server and SQLite database. See [HR.md](HR.md) for setup, permissions, backup requirements, verification, and separate hosted-backend requirements.
+
+# Odoo live data
+
+Administrators can open **Odoo** in the local CRM to browse read-only Odoo data. See [ODOO.md](ODOO.md) for configuration and usage.
+
+# Local staff accounts
+
+The local CRM now uses email/password accounts and shared server records. See [ACCOUNTS.md](ACCOUNTS.md) for setup, permissions, data migration, and the distinction from the existing hosted version. The older demo notes below describe the previous browser-only version.
+
 # COC CRM — starter project
 
 A React + Vite demo for managing an optical store's customers, orders/warranties, eye exams, and branches.
@@ -36,3 +48,9 @@ A React + Vite demo for managing an optical store's customers, orders/warranties
 - A dash in the picture is represented by a blank (null) cell; it is not automatically counted as a stock quantity.
 - Category cards show matrix totals separately from the original custom stock-item totals. The original Add stock item list is preserved below each matrix.
 - Browser-local demo storage is not synchronized between users, browsers, or branches.
+
+Branch inventory is available inside **Inventory**. Branch cards and filters show CRM stock items plus received transfers. Outgoing item transfers reduce source quantities; removing a transfer restores the source and destination totals. Inventory summaries are restricted to the account's permitted branches. Central Vegas lens matrices remain in the category cards below. These totals use CRM records, not an Odoo stock synchronization.
+
+
+Inventory has separate **Frames inventory** and **Glasses inventory** tabs. Frames inventory opens by default and shows only the Frames category, with frame-model/SKU search, branch quantities, an Add frame action, and editing of opening stock records. Glasses inventory retains lens transfers, SPH/CYL, and the existing central Vegas lens matrices. Select Frames in Transfers to transfer frame stock items.
+

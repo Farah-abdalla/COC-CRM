@@ -1,39 +1,38 @@
-import React, { useState } from 'react';
-import { frameCommission, vegasLensCommission, invoiceCommission, salesPeople } from './incentiveData';
-
-const money=value=>new Intl.NumberFormat('en-EG',{style:'currency',currency:'EGP',minimumFractionDigits:2}).format(value);
+import {isPersonalAccount} from './personalAccess';
+import BranchIncentiveTargets from './BranchIncentiveTargets';
+import {branchDailyTargets,branchIncentiveTotals,incentiveBranch} from './branchIncentiveData';
+import {cairoToday} from './taskDeadlines';
+import './commission.css';
+import {invoiceItems} from './invoiceItems';
+import {invoiceProductName} from './invoiceProductData';
+import {t as uiT,useLanguage as useUiLanguage,getLocale as uiLocale} from './i18n';
+import React,{useState} from 'react';
+import {commissionBreakdown,invoiceCommissionCents,salesPeople} from './incentiveData';
+import {formatTreasuryAmount} from './treasuryAmounts';
+import {useAuth} from './Auth';
+import CommissionSettings from './CommissionSettings';
 const personKey=name=>String(name||'').trim().toLowerCase();
+export default function IncentivePage({invoices,rules=[],onSaveRule,products=[],creditNotes=[],branches=[]}){
+  useUiLanguage();
 
-export default function IncentivePage({invoices}){
-  const [salesPerson,setSalesPerson]=useState('all');
-  const [startDate,setStartDate]=useState('');
-  const [endDate,setEndDate]=useState('');
-  const names=new Map(salesPeople.map(name=>[personKey(name),name]));
-  invoices.forEach(invoice=>{const key=personKey(invoice.salesPerson);if(key&&!names.has(key))names.set(key,invoice.salesPerson.trim());});
-  const invalidRange=Boolean(startDate&&endDate&&startDate>endDate);
-  const eligible=invoices.filter(invoice=>!invoice.isVoided&&invoiceCommission(invoice)>0&&personKey(invoice.salesPerson));
-  const rows=eligible.filter(invoice=>!invalidRange&&(salesPerson==='all'||personKey(invoice.salesPerson)===salesPerson)&&(!(startDate||endDate)||(invoice.date&&(!startDate||invoice.date>=startDate)&&(!endDate||invoice.date<=endDate)))).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(a.number||'').localeCompare(String(b.number||'')));
-  const groups=new Map();
-  rows.forEach(invoice=>{
-    const person=personKey(invoice.salesPerson),key=JSON.stringify([person,invoice.date||'']);
-    if(!groups.has(key))groups.set(key,{person:nameFor(person),date:invoice.date||'',count:0,frames:0,vegas:0,total:0});
-    const group=groups.get(key);group.count++;group.frames+=frameCommission(invoice)>0?1:0;group.vegas+=vegasLensCommission(invoice)>0?1:0;group.total+=invoiceCommission(invoice);
-  });
-  function nameFor(key){return names.get(key)||key;}
-  const total=rows.reduce((sum,invoice)=>sum+invoiceCommission(invoice),0);
-  return <section className="panel incentive-panel">
-    <div className="panel-head"><div><h2>Salesperson incentive report</h2><p>Frame: EGP 50. Vegas lens: EGP 50. Invoices containing both earn EGP 100.</p></div></div>
-    <div className="record-filters">
-      <label>Sales person<select aria-label="Filter incentive salesperson" value={salesPerson} onChange={event=>setSalesPerson(event.target.value)}><option value="all">All salespeople</option>{[...names].sort((a,b)=>a[1].localeCompare(b[1])).map(([key,name])=><option key={key} value={key}>{name}</option>)}</select></label>
-      <label>From date<input aria-label="Incentive from date" type="date" value={startDate} max={endDate||undefined} onChange={event=>setStartDate(event.target.value)}/></label>
-      <label>To date<input aria-label="Incentive to date" type="date" value={endDate} min={startDate||undefined} onChange={event=>setEndDate(event.target.value)}/></label>
-      <button className="secondary" onClick={()=>{setSalesPerson('all');setStartDate('');setEndDate('');}}>Clear filters</button>
-    </div>
-    {invalidRange&&<p className="sales-date-error" role="alert">To date must be on or after From date.</p>}
-    <p className="stage-board-help">Dates refer to the invoice date and include both selected dates. Totals update when invoices change.</p>
-    <div className="incentive-summary"><div><span>Eligible invoices</span><strong>{rows.length}</strong></div><div><span>Total commission</span><strong data-testid="commission-total">{money(total)}</strong></div></div>
-    <div className="table-wrap incentive-report-table" tabIndex={0} aria-label="Commission by salesperson and date"><table><thead><tr><th>Sales person</th><th>Invoice date</th><th>Frame invoices</th><th>Vegas lens invoices</th><th>Total commission</th></tr></thead><tbody>{[...groups].map(([key,group])=><tr key={key}><td><b>{group.person}</b></td><td>{group.date||'—'}</td><td>{group.frames}</td><td>{group.vegas}</td><td><b>{money(group.total)}</b></td></tr>)}</tbody><tfoot><tr><th colSpan={2}>Total</th><td>{rows.filter(invoice=>frameCommission(invoice)>0).length}</td><td>{rows.filter(invoice=>vegasLensCommission(invoice)>0).length}</td><td>{money(total)}</td></tr></tfoot></table></div>
-    {!rows.length&&<p className="empty">No commission-eligible invoices match the selected salesperson and dates.</p>}
-    {rows.length>0&&<><h3 className="incentive-detail-heading">Invoice details</h3><div className="table-wrap incentive-invoices-table" tabIndex={0} aria-label="Invoices earning commission"><table><thead><tr><th>Invoice number</th><th>Date</th><th>Sales person</th><th>SKU</th><th>Frame commission</th><th>Vegas lens commission</th><th>Total commission</th></tr></thead><tbody>{rows.map(invoice=><tr key={invoice.id}><td><b>{invoice.number||'INV-'+invoice.id}</b></td><td>{invoice.date||'—'}</td><td>{nameFor(personKey(invoice.salesPerson))}</td><td>{invoice.sku}</td><td>{money(frameCommission(invoice))}</td><td>{money(vegasLensCommission(invoice))}</td><td>{money(invoiceCommission(invoice))}</td></tr>)}</tbody></table></div></>}
-  </section>;
+ const auth=useAuth(),[salesPerson,setSalesPerson]=useState('all'),[startDate,setStartDate]=useState(cairoToday),[endDate,setEndDate]=useState(cairoToday),[branch,setBranch]=useState('all');
+ const personal=isPersonalAccount(auth.user);
+ const branchOptions=[...new Set([...(auth.user.isAdmin||auth.user.branches==='all'?Object.keys(branchDailyTargets):[]),...branches,...invoices.map(invoice=>invoice.branch),...creditNotes.map(note=>note.branch)].filter(Boolean).map(incentiveBranch))].sort((a,b)=>a.localeCompare(b));
+ const branchReport=branchIncentiveTotals({invoices,creditNotes,branches:branchOptions,startDate,endDate,branch});
+ const names=new Map((personal?[auth.user.salesPersonName||auth.user.name]:salesPeople).map(name=>[personKey(name),name]));
+ invoices.forEach(invoice=>{const key=personKey(invoice.salesPerson);if(key&&!names.has(key))names.set(key,invoice.salesPerson.trim());});
+ const invalidRange=!branchReport.days,selectedRules=rules.filter(rule=>rule.enabled);
+ const rows=invoices.filter(invoice=>invoiceCommissionCents(invoice,rules,products)>0&&personKey(invoice.salesPerson)&&!invalidRange&&(branch==='all'||incentiveBranch(invoice.branch)===branch)&&(salesPerson==='all'||personKey(invoice.salesPerson)===salesPerson)&&(!(startDate||endDate)||(invoice.date&&(!startDate||invoice.date>=startDate)&&(!endDate||invoice.date<=endDate)))).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(a.number||'').localeCompare(String(b.number||'')));
+ const groups=new Map();
+ for(const invoice of rows){const person=personKey(invoice.salesPerson),key=JSON.stringify([incentiveBranch(invoice.branch),person,invoice.date||'']);if(!groups.has(key))groups.set(key,{branch:incentiveBranch(invoice.branch),person:names.get(person)||person,date:invoice.date||'',count:0,itemCounts:{},totalCents:0});const group=groups.get(key);group.count++;group.totalCents+=invoiceCommissionCents(invoice,rules,products);for(const rule of commissionBreakdown(invoice,rules,products))group.itemCounts[rule.id]=(group.itemCounts[rule.id]||0)+rule.quantity;}
+ const total=rows.reduce((sum,invoice)=>sum+invoiceCommissionCents(invoice,rules,products),0);
+ return <>{!personal&&<BranchIncentiveTargets report={branchReport} branches={branchOptions} branch={branch} onBranchChange={setBranch} startDate={startDate} endDate={endDate} onStartDateChange={setStartDate} onEndDateChange={setEndDate} onToday={()=>{setStartDate(cairoToday());setEndDate(cairoToday());}}/>}{personal&&<section className="panel"><div className="record-filters"><label>{uiT("Start date")}<input type="date" value={startDate} max={endDate||undefined} onChange={event=>setStartDate(event.target.value)}/></label><label>{uiT("End date")}<input type="date" value={endDate} min={startDate||undefined} onChange={event=>setEndDate(event.target.value)}/></label></div></section>}{auth.user.isAdmin&&<details className="incentive-settings-disclosure"><summary>{uiT("Commission item settings")}</summary><CommissionSettings rules={rules} onSave={onSaveRule} invoices={invoices} products={products}/></details>}<section className="panel incentive-panel">
+  <div className="panel-head"><div><h2>{uiT(personal?'My commissions':'Salesperson incentive report')}</h2><p>{selectedRules.length ? selectedRules.map(rule => rule.name + ': ' + formatTreasuryAmount(rule.amountCents)+' '+uiT('per unit')).join(' · ') : uiT('No commission items are selected.')}</p></div></div>
+  <div className="record-filters"><label>{uiT("Sales person")}<select aria-label={uiT("Filter incentive salesperson")} value={salesPerson} onChange={e=>setSalesPerson(e.target.value)}><option value="all">{uiT("All salespeople")}</option>{[...names].sort((a,b)=>a[1].localeCompare(b[1])).map(([key,name])=><option key={key} value={key}>{uiT(name)}</option>)}</select></label><button className="secondary" onClick={()=>{setSalesPerson('all');setBranch('all');setStartDate(cairoToday());setEndDate(cairoToday());}}>{uiT("Clear filters")}</button></div>
+  {invalidRange&&<p className="sales-date-error" role="alert">{uiT("To date must be on or after From date.")}</p>}<p className="stage-board-help">{uiT("Salesperson commissions follow the selected branch and invoice dates.")}</p>
+  <div className="incentive-summary"><div><span>{uiT("Eligible invoices")}</span><strong>{rows.length}</strong></div><div><span>{uiT("Total commission")}</span><strong data-testid="commission-total">{formatTreasuryAmount(total)}</strong></div></div>
+  <div className="table-wrap incentive-report-table" tabIndex={0} aria-label={uiT("Commission by salesperson and date")}><table><thead><tr><th>{uiT("Branch")}</th><th>{uiT("Sales person")}</th><th>{uiT("Invoice date")}</th><th>{uiT("Eligible invoices")}</th>{selectedRules.map(rule=><th key={rule.id}>{rule.name} {uiT("units")}</th>)}<th>{uiT("Total commission")}</th></tr></thead><tbody>{[...groups].map(([key,group])=><tr key={key}><td>{uiT(group.branch)}</td><td><b>{group.person}</b></td><td>{group.date||'—'}</td><td>{group.count}</td>{selectedRules.map(rule=><td key={rule.id}>{group.itemCounts[rule.id]||0}</td>)}<td><b>{formatTreasuryAmount(group.totalCents)}</b></td></tr>)}</tbody><tfoot><tr><th colSpan={3}>{uiT("Total")}</th><td>{rows.length}</td>{selectedRules.map(rule=><td key={rule.id}>{rows.reduce((sum,invoice)=>sum+(commissionBreakdown(invoice,rules,products).find(item=>item.id===rule.id)?.quantity||0),0)}</td>)}<td>{formatTreasuryAmount(total)}</td></tr></tfoot></table></div>
+  {!rows.length&&<p className="empty">{uiT("No commission-eligible invoices match the selected salesperson and dates.")}</p>}
+  {rows.length>0&&<><h3 className="incentive-detail-heading">{uiT("Invoice details")}</h3><div className="table-wrap incentive-invoices-table" tabIndex={0} aria-label={uiT("Invoices earning commission")}><table><thead><tr><th>{uiT("Invoice number")}</th><th>{uiT("Branch")}</th><th>{uiT("Date")}</th><th>{uiT("Sales person")}</th><th>{uiT("Item name")}</th>{selectedRules.map(rule=><th key={rule.id}>{rule.name} {uiT("commission")}</th>)}<th>{uiT("Total commission")}</th></tr></thead><tbody>{rows.map(invoice=>{const matches=new Map(commissionBreakdown(invoice,rules,products).map(rule=>[rule.id,rule]));return <tr key={invoice.id}><td><b>{invoice.number || uiT('INV-') + invoice.id}</b></td><td>{uiT(incentiveBranch(invoice.branch))}</td><td>{invoice.date||'—'}</td><td>{names.get(personKey(invoice.salesPerson))}</td><td>{invoiceItems(invoice).map(item=><div key={item.id}>{invoiceProductName(item,products)||uiT('Item name unavailable')} × {item.quantity}</div>)}</td>{selectedRules.map(rule=><td key={rule.id}>{formatTreasuryAmount(matches.get(rule.id)?.commissionCents||0)}</td>)}<td>{formatTreasuryAmount(invoiceCommissionCents(invoice,rules,products))}</td></tr>;})}</tbody></table></div></>}
+ </section></>;
 }

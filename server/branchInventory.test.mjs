@@ -1,0 +1,15 @@
+﻿import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createAccountService} from './accounts.mjs';
+function client(service){let cookie='';return async(path,method='GET',body)=>{const response=await service.handle(new Request('http://localhost:5173'+path,{method,headers:{Cookie:cookie,...(method==='GET'?{}:{Origin:'http://localhost:5173','Content-Type':'application/json'})},...(method==='GET'?{}:{body:JSON.stringify(body)})}),{local:true});if(response.headers.get('set-cookie'))cookie=response.headers.get('set-cookie').split(';')[0];return {status:response.status,body:await response.json()};};}
+const ok=result=>{assert.equal(result.status,200,JSON.stringify(result.body));return result.body;};
+test('branch inventory API scopes rows and uses outbound transfers hidden from a branch account',async t=>{
+ const service=createAccountService(':memory:');t.after(()=>service.close());const owner=client(service),staff=client(service),outsider=client(service),anonymous=client(service);
+ ok(await owner('/api/auth/setup','POST',{name:'Owner',email:'owner@inventory.test',password:'owner-password-123'}));
+ const state=ok(await owner('/api/crm-data'));state.snapshot.data.inventoryItems=[{id:1,branch:'Nasr City',category:'HMC 1.56 Plus',itemName:'Branch frame',quantity:10},{id:2,branch:'New Cairo',category:'HMC 1.56 Plus',itemName:'Secret frame',quantity:90}];state.snapshot.data.transfers=[{id:3,date:'2026-10-29',sourceType:'item',sourceItemId:1,sourceBranch:'Nasr City',toBranch:'New Cairo',itemName:'Branch frame',category:'HMC 1.56 Plus',quantity:3}];ok(await owner('/api/crm-data','PUT',{revision:state.revision,snapshot:state.snapshot}));
+ for(const [name,permissions] of [['staff',{'Inventory':{view:true}}],['outsider',{}]])ok(await owner('/api/users','POST',{dataScope:'branch',name,email:name+'@inventory.test',password:'staff-password-123',attendanceBranch:'Nasr City',branches:['Nasr City'],permissions}));
+ ok(await staff('/api/auth/login','POST',{email:'staff@inventory.test',password:'staff-password-123'}));ok(await outsider('/api/auth/login','POST',{email:'outsider@inventory.test',password:'staff-password-123'}));
+ const result=ok(await staff('/api/branch-inventory'));assert.equal(result.branches.length,1);assert.equal(result.branches[0].units,7);assert.equal(result.rows.length,1);assert.ok(!JSON.stringify(result).includes('Secret frame'));assert.ok(!JSON.stringify(result).includes('New Cairo'));
+ assert.equal(ok(await owner('/api/branch-inventory?kind=frames')).rows.length,0);assert.equal(ok(await owner('/api/branch-inventory?kind=glasses')).rows.length,3);assert.equal((await owner('/api/branch-inventory?kind=bad')).status,400);
+ assert.equal((await anonymous('/api/branch-inventory')).status,401);assert.equal((await outsider('/api/branch-inventory')).status,403);assert.equal((await staff('/api/branch-inventory','POST',{})).status,405);assert.ok(ok(await owner('/api/branch-inventory')).branches.some(row=>row.branch==='New Cairo'&&row.units===93));
+});

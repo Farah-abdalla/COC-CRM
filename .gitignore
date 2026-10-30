@@ -1,3 +1,8 @@
 /sites/coc-crm/
 /sites/storage-starter/
 node_modules/
+.local/
+
+.env*
+
+!.env.example

@@ -1,126 +1,84 @@
+import {readLinkedOdooSales} from './odooSalesLink';
+import {importOdooInvoices as mergeOdooInvoices} from './mergeOdooInvoices';
+import {addTestExamples} from './exampleData';
 import {useEffect,useRef,useState} from 'react';
-import {validSnapshot,encodeSnapshot} from './storagePayload';
-import {saveBrowserSnapshot} from './browserStorage';
-
-const modeKey='opticrm_storageMode';
-const draftKey=id=>'opticrm_cloudDraft_'+id;
-async function request(method='GET',body) {
-  const response=await fetch('/api/crm-data',{method,credentials:'same-origin',cache:'no-store',headers:body?{'Content-Type':'application/json'}:undefined,body:body?JSON.stringify(body):undefined});
-  let result; try {result=await response.json();} catch {throw new Error('Online saving is unavailable on this host. Use the ChatGPT Site.');}
-  if(!response.ok){const error=new Error(result.error||'Online saving failed.');error.status=response.status;throw error;}
-  return result;
-}
-export function useDataStorage(data,matrixEdits,setData,setMatrixEdits,loadBrowser) {
-  const [view,setView]=useState({mode:'browser',status:'Saved in this browser',busy:false,error:'',user:null,needsSignIn:false,conflict:false});
-  const state=useRef({mode:'browser',snapshot:{data,matrixEdits},dirty:false,revision:0,user:null,saving:false,busy:false,epoch:0});
-  const latest=useRef({data,matrixEdits});latest.current={data,matrixEdits};
-  const browserLoader=useRef(loadBrowser);browserLoader.current=loadBrowser;
-  const initialized=useRef(false);
-  const publish=patch=>setView(v=>({...v,...patch}));
-  function apply(snapshot){state.current.snapshot=snapshot;setData(snapshot.data);setMatrixEdits(snapshot.matrixEdits);}
-  function cacheDraft(){const s=state.current;try{localStorage.setItem(draftKey(s.user.id),JSON.stringify({snapshot:s.snapshot,revision:s.revision}));}catch{}}
-  async function connect() {
-    const s=state.current;if(s.busy||s.saving||s.dirty)return;
-    const epoch=++s.epoch;s.busy=true;publish({busy:true,error:'',needsSignIn:false,status:'Connecting to online storage...'});
-    try {
-      const remote=await request();if(s.epoch!==epoch)return;
-      s.user=remote.user;s.revision=remote.revision;s.mode='online';s.conflict=false;
-      let cached;try{cached=JSON.parse(localStorage.getItem(draftKey(remote.user.id))||'null');}catch{}
-      if(cached && validSnapshot(cached.snapshot)){
-        apply(cached.snapshot);s.dirty=true;
-        if(cached.revision!==remote.revision){s.conflict=true;publish({conflict:true,error:'This device has unsaved changes and the online copy has also changed. Download your backup before loading the online copy.'});}
-      } else if(remote.snapshot) {
-        if(!validSnapshot(remote.snapshot))throw new Error('Online records are invalid. Your browser records have not been changed.');
-        apply(remote.snapshot);s.dirty=false;
-      } else {s.mode='browser';publish({mode:'browser',empty:true,user:remote.user,status:'No online records yet. Choose what to save.'});return;}
-      try{localStorage.setItem(modeKey,'online');}catch{}
-      publish({mode:'online',user:remote.user,empty:false,status:s.dirty?'Changes waiting to save':'Saved online',needsSignIn:false});
-    } catch(error) {
-      publish({error:error.status===401?'Sign in with ChatGPT to save and open your online records.':error.message,needsSignIn:error.status===401,status:'Online storage not connected'});
-    } finally {if(s.epoch===epoch){s.busy=false;publish({busy:false});}}
-  }
-  async function initializeOnline() {
-    const s=state.current;if(s.busy||s.saving||s.dirty)return;
-    s.busy=true;publish({busy:true,error:'',status:'Creating online copy...'});
-    try {
-      const snapshot=latest.current;encodeSnapshot(snapshot);
-      const remote=await request('PUT',{revision:0,snapshot,userId:s.user?.id});
-      s.mode='online';s.user=remote.user;s.revision=remote.revision;s.snapshot=snapshot;s.dirty=false;s.conflict=false;
-      try{localStorage.setItem(modeKey,'online');}catch{}
-      publish({mode:'online',empty:false,user:remote.user,status:'Saved online',conflict:false});
-    }catch(error){publish({error:error.status===409?'Online records already exist. Choose Online to load them.':error.message,needsSignIn:error.status===401,status:'Online copy not created'});}
-    finally{s.busy=false;publish({busy:false});}
-  }
-  function commit(snapshot) {
-    const s=state.current;
-    if(s.busy||s.conflict){window.alert('Resolve the storage message before editing records.');return false;}
-    if(s.mode==='browser'){
-      try {
-        saveBrowserSnapshot(localStorage,snapshot,latest.current);
-      }catch{publish({error:'Browser storage is full. Download a backup and reduce saved images.',status:'Not saved'});return false;}
-      s.snapshot=snapshot;publish({status:'Saved in this browser',error:''});
-    }else{
-      try{encodeSnapshot(snapshot);}catch(error){window.alert(error.message);return false;}
-      s.snapshot=snapshot;s.dirty=true;cacheDraft();publish({status:'Changes waiting to save',error:''});
-    }
-    apply(snapshot);return true;
-  }
-  async function flush() {
-    const s=state.current;if(s.mode!=='online'||s.busy||s.saving||s.conflict||!s.dirty)return;
-    s.saving=true;const snapshot=s.snapshot;publish({status:'Saving online...'});
-    try {
-      const remote=await request('PUT',{revision:s.revision,snapshot,userId:s.user.id});
-      s.revision=remote.revision;s.dirty=s.snapshot!==snapshot;
-      if(s.dirty){cacheDraft();publish({status:'Changes waiting to save',error:''});}
-      else {try{localStorage.removeItem(draftKey(s.user.id));}catch{}publish({status:'Saved online',error:'',needsSignIn:false});}
-    }catch(error){
-      if(error.status===409)s.conflict=true;
-      publish({error:error.status===409?'Another device saved newer records. Download your unsaved backup, then load the online copy.':error.message,status:'Not saved online',conflict:s.conflict,needsSignIn:error.status===401});
-    }finally{s.saving=false;}
-  }
-  async function refresh() {
-    const s=state.current;
-    if(s.mode!=='online'||s.busy||s.saving||s.dirty||s.conflict)return;
-    s.busy=true;
-    try{
-      const remote=await request();
-      if(remote.user.id!==s.user.id)throw new Error('Your signed-in account changed. Reload this page to reconnect.');
-      if(remote.revision!==s.revision && remote.snapshot){
-        if(!validSnapshot(remote.snapshot))throw new Error('Online records are invalid.');
-        // Edits made during the fetch remain local and are handled as a conflict.
-        if(s.dirty){s.conflict=true;publish({conflict:true,error:'Online records changed. Download your backup before reloading.'});}
-        else{s.revision=remote.revision;apply(remote.snapshot);publish({status:'Saved online',error:''});}
-      }
-    }catch(error){publish({error:error.message,needsSignIn:error.status===401});}
-    finally{s.busy=false;}
-  }
-  function chooseBrowser() {
-    const s=state.current;
-    if(s.busy||s.saving)return;
-    if(s.dirty){publish({error:'Save your online changes or download a backup before leaving online mode.'});return;}
-    s.epoch++;s.mode='browser';s.user=null;s.conflict=false;
-    apply(browserLoader.current());
-    try{localStorage.setItem(modeKey,'browser');}catch{}
-    publish({mode:'browser',busy:false,user:null,error:'',conflict:false,empty:false,needsSignIn:false,status:'Saved in this browser'});
-  }
-  async function reloadOnline(){
-    const s=state.current;if(s.saving||s.busy)return;
-    if(s.dirty&&!window.confirm('Replace unsaved changes on this device with the online copy? Download a backup first if you need these changes.'))return;
-    try{localStorage.removeItem(draftKey(s.user.id));}catch{}
-    s.dirty=false;s.conflict=false;publish({conflict:false,error:''});await connect();
-  }
-  function download(){
-    const blob=new Blob([JSON.stringify({format:'coc-crm-backup-v1',savedAt:new Date().toISOString(),...latest.current},null,2)],{type:'application/json'});
-    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='coc-crm-backup-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
-  }
-  useEffect(()=>{
-    if(!initialized.current){initialized.current=true;try{if(localStorage.getItem(modeKey)==='online'||sessionStorage.getItem('opticrm_connectOnline')==='yes'){sessionStorage.removeItem('opticrm_connectOnline');connect();}}catch{}}
-    let seconds=0;
-    const timer=setInterval(()=>{seconds++;const s=state.current;if(s.dirty){if(seconds%5===0)flush();}else if(seconds%15===0)refresh();},1000);
-    const leave=e=>{if(state.current.dirty){e.preventDefault();e.returnValue='';}};
-    const focus=()=>refresh();
-    window.addEventListener('beforeunload',leave);window.addEventListener('focus',focus);window.addEventListener('online',flush);
-    return ()=>{clearInterval(timer);window.removeEventListener('beforeunload',leave);window.removeEventListener('focus',focus);window.removeEventListener('online',flush);};
-  },[]);
-  return {...view,commit,connect,initializeOnline,chooseBrowser,flush,reloadOnline,download};
+import {api,useAuth} from './Auth';
+import {mergePermittedSnapshot,validateSnapshot} from './accessControl';
+export function useDataStorage(data,matrixEdits,setData,setMatrixEdits){
+ const auth=useAuth(),user=useRef(auth.user),importing=useRef(false);user.current=auth.user;
+ const [view,setView]=useState({mode:'company',status:'Saved to company records',busy:false,error:'',conflict:false});
+ const state=useRef({snapshot:auth.initial.snapshot,revision:auth.initial.revision,dirty:false,saving:false,conflict:false,blocked:false});
+ const apply=snapshot=>{state.current.snapshot=snapshot;setData(snapshot.data);setMatrixEdits(snapshot.matrixEdits);};
+ const publish=patch=>setView(current=>({...current,...patch}));
+ function commit(snapshot){
+  const s=state.current;if(s.action){window.alert('Wait for the current save to finish.');return false;}if(s.conflict||s.blocked){window.alert('Download your unsaved backup and reload company records before editing.');return false;}
+  try{mergePermittedSnapshot(s.snapshot,snapshot,user.current);}catch(error){window.alert(error.message);return false;}
+  s.dirty=true;apply(snapshot);publish({status:'Changes waiting to save',error:''});return true;
+ }
+ async function flush(){
+  const s=state.current;if(!s.dirty||s.saving||s.conflict||s.blocked)return;
+  s.saving=true;const snapshot=s.snapshot;publish({status:'Saving company records…'});
+  try{const remote=await api('/api/crm-data','PUT',{revision:s.revision,snapshot});s.revision=remote.revision;s.dirty=s.snapshot!==snapshot;if(!s.dirty&&remote.snapshot)apply(remote.snapshot);publish({status:s.dirty?'Changes waiting to save':'Saved to company records',error:''});}
+  catch(error){if(error.status===409)s.conflict=true;if(error.status===401||error.status===403)s.blocked=true;publish({status:'Not saved',error:error.message,conflict:s.conflict});}
+  finally{s.saving=false;}
+ }
+ async function changePayment(rowId,changes,source){
+  const s=state.current;
+  if(s.action||s.saving)throw new Error('Wait for the current save to finish.');
+  if(s.conflict||s.blocked)throw new Error('Reload company records before changing payments.');
+  await flush();
+  if(s.dirty||s.saving||s.conflict||s.blocked)throw new Error('Save pending changes or resolve the storage error before changing payments.');
+  s.saving=true;s.action=true;publish({busy:true,status:'Saving company records…',error:''});
+  try{
+   const remote=await api('/api/payment-entry','PATCH',{revision:s.revision,rowId,changes,source,actorId:user.current.id});
+   if(remote.user.id!==user.current.id){s.blocked=true;throw new Error('The signed-in account changed. Reload company records.');}
+   s.revision=remote.revision;s.dirty=false;auth.updateUser(remote.user);apply(remote.snapshot);publish({status:'Saved to company records',error:''});
+  }catch(error){if(error.status===409)s.conflict=true;if(error.status===401)s.blocked=true;publish({status:'Not saved',error:error.message,conflict:s.conflict});throw error;}
+  finally{s.saving=false;s.action=false;publish({busy:false});}
+ }
+ async function refresh(force=false){
+  const s=state.current;if(s.saving||(!force&&(s.dirty||s.conflict||s.blocked)))return;
+  try{const remote=await api('/api/crm-data');if(remote.user.id!==user.current.id){s.blocked=true;publish({error:'The signed-in account changed. Download your unsaved backup, then sign out.'});return;}
+   // Do not overwrite edits made during the request.
+   if(!force&&s.dirty)return;
+   auth.updateUser(remote.user);s.revision=remote.revision;s.dirty=false;s.conflict=false;s.blocked=false;apply(remote.snapshot);publish({status:'Saved to company records',error:'',conflict:false});
+  }catch(error){publish({error:error.message});if(error.status===401&&!s.dirty)auth.expire();}
+ }
+ async function reloadOnline(){if(state.current.dirty&&!window.confirm('Replace unsaved changes with company records? Download a backup first if you need these changes.'))return;await refresh(true);}
+ function download(){const blob=new Blob([JSON.stringify({format:'coc-crm-backup-v1',savedAt:new Date().toISOString(),...state.current.snapshot},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='coc-crm-backup-'+new Date().toISOString().slice(0,10)+'.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+ function importBrowser(){
+  if(!user.current.isOwner){window.alert('Only the owner can import old browser records.');return;}
+  if(!window.confirm('Replace shared company records with the old records from this browser? Download a company backup first.'))return;
+  try{const next=structuredClone(state.current.snapshot);let found=false;for(const key of Object.keys(next.data)){const raw=localStorage.getItem('opticrm_'+key);if(raw!==null){next.data[key]=JSON.parse(raw);found=true;}}const matrix=localStorage.getItem('opticrm_inventoryMatrices');if(matrix){for(const [category,edits] of Object.entries(JSON.parse(matrix))){next.matrixEdits[category]={...(next.matrixEdits[category]||{}),...edits};}}if(!found)throw new Error('No old CRM records were found in this browser.');commit(next);}catch(error){window.alert(error.message);}
+ }
+ async function loadExamples(){
+  if(!user.current.isAdmin){window.alert('Only administrators can load test examples.');return;}
+  if(state.current.saving){window.alert('Wait for the current save to finish.');return;}
+  try{const now=new Date(),today=[now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-'),result=addTestExamples(state.current.snapshot,today);
+   if(!result.totalAdded){publish({notice:'Test examples are already loaded. Existing records were kept.'});return;}
+   if(!commit(result.snapshot))return;await flush();publish({notice:state.current.dirty?'Test examples are waiting to save. Check the storage status.':'Test examples added. Existing records were kept.'});
+  }catch(error){publish({error:error.message});}
+ }
+ async function importOdooInvoices(filters){
+  if(!user.current.isAdmin)throw new Error('Administrator access is required.');
+  if(importing.current)throw new Error('An Odoo import is already running.');
+  importing.current=true;
+  try{
+  await flush();if(state.current.dirty||state.current.saving||state.current.conflict||state.current.blocked)throw new Error('Save pending changes before linking Odoo sales.');
+  const actor=user.current.id;
+  const remote=await readLinkedOdooSales(api,filters,state.current.snapshot.data.branches);
+  if(user.current.id!==actor)throw new Error('The signed-in account changed. Reload company records.');
+  const s=state.current;
+  const result=mergeOdooInvoices(s.snapshot.data,remote.records,{});
+  const products=new Map((s.snapshot.data.odooReportProducts||[]).map(product=>[product.id,product]));for(const product of remote.products)products.set(product.id,product);result.data.odooReportProducts=[...products.values()];
+  const nextSnapshot={...s.snapshot,data:result.data};
+  try{validateSnapshot(nextSnapshot);}catch(error){if(String(error.message).includes('1.8 MB'))throw new Error('Selected range exceeds available CRM storage. Choose a shorter date range.');throw error;}
+  if(result.added||result.updated||JSON.stringify(s.snapshot.data.odooReportProducts)!==JSON.stringify(result.data.odooReportProducts)){if(!commit(nextSnapshot))throw new Error('Unable to save imported invoices.');await flush();if(s.dirty||s.conflict||s.blocked)throw new Error('Imported invoices are waiting to save. Check the storage status.');}
+  const importedIds=new Set(remote.records.map(invoice=>String(invoice.id)));
+  return {added:result.added,existing:result.existing,updated:result.updated,skipped:result.skipped,warnings:remote.warnings,linkedInvoices:result.data.invoices.filter(invoice=>invoice.odooInvoiceId&&importedIds.has(String(invoice.odooInvoiceId))).map(invoice=>({id:invoice.id,number:invoice.number}))};
+  }finally{importing.current=false;}
+ }
+ async function signOut(){if(state.current.saving){window.alert('Wait for the current save to finish.');return;}if(state.current.dirty&&!window.confirm('Sign out and discard unsaved changes? Download a backup first to keep them.'))return;try{await auth.logout();}catch(error){publish({error:error.message});}}
+ useEffect(()=>{let seconds=0;const timer=setInterval(()=>{seconds++;if(state.current.dirty){if(seconds%5===0)flush();}else if(seconds%15===0)refresh();},1000);const focus=()=>refresh(),leave=e=>{if(state.current.dirty){e.preventDefault();e.returnValue='';}};window.addEventListener('focus',focus);window.addEventListener('beforeunload',leave);return()=>{clearInterval(timer);window.removeEventListener('focus',focus);window.removeEventListener('beforeunload',leave);};},[]);
+ return {...view,user:auth.user,commit,flush,importOdooInvoices,changePayment,reloadOnline,download,importBrowser,loadExamples,signOut};
 }
